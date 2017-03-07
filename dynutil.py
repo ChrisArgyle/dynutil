@@ -36,8 +36,23 @@ def list_redirect(zone_name):
     except Exception as e:
         errordie("failed to get redirects for zone '{}': {}".format(zone_name, e))
 
+    # build list of redirects
+    redirect_list = []
     for redirect in redirects:
-        print("{} -> {}".format(redirect._fqdn, redirect._url))
+        redirect_list.append({ redirect._fqdn: redirect._url })
+
+    # bail out if there weren't any redirects
+    if len(redirect_list) == 0:
+        return
+
+    # build and output yaml document
+    redirect_dict = [{
+            "zoneredirects": {
+                "zone": zone_name,
+                "redirects": redirect_list,
+                },
+            }]
+    print(yaml.dump(redirect_dict, default_flow_style=False))
 
 def errordie(message):
     """
