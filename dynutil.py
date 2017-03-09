@@ -81,7 +81,7 @@ def list_redirect(zone_name):
 
     # build and output yaml document
     redirect_dict = [{
-            "zoneredirects": {
+            "webredirects": {
                 "zone": zone_name,
                 "redirects": redirect_list,
                 },
