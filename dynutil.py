@@ -6,10 +6,44 @@ import yaml
 
 from dyn.tm.session import DynectSession
 from dyn.tm.zones import Zone, get_all_zones
+from dyn.tm.services.dsf import get_all_dsf_services, get_all_records
 
 CUSTOMER_NAME = "customer_name"
 USER_NAME = "user_name"
 PASSWORD = "password"
+
+
+def list_dsf():
+    """
+    Print information about DSF services
+    """
+    try:
+        services = get_all_dsf_services()
+    except Exception as e:
+        errordie("failed to get DSF services: {}".format(e))
+
+    # build and output yaml document
+    services_dict = []
+    for service in services:
+        service_dict = {
+                'label': service.label,
+                'nodes': service.nodes,
+                'records': [],
+            }
+
+        # get records for this DSF service
+        try:
+            records = get_all_records(service)
+        except Exception as e:
+            errordie("failed to get records for DSF service '{}': {}".format(service.label, e))
+
+        for record in records:
+            service_dict['records'].append({ record.label: str(record) })
+
+        services_dict.append({ 'trafficdirector': service_dict })
+
+    print(yaml.dump(services_dict))
+
 
 def list_zone(zone_name):
     """
@@ -84,7 +118,7 @@ def main():
     if getattr(args, 'list', None) == None:
         errordie("Please specify type of items to list")
     # redirect and dsf queries need a zone to run against
-    if args.zone == None and (args.list == 'redirect' or args.list == 'dsf'):
+    if args.zone == None and (args.list == 'redirect'):
         errordie("Please specify zone to run query against")
 
     # validate creds yaml file
@@ -114,8 +148,7 @@ def main():
     if args.list == 'redirect':
         list_redirect(args.zone)
     if args.list == 'dsf':
-        # list DSF services
-        pass
+        list_dsf()
 
 if __name__ == "__main__":
     main()
