@@ -35,14 +35,15 @@ def list_dsf():
         try:
             records = get_all_records(service)
         except Exception as e:
-            errordie("failed to get records for DSF service '{}': {}".format(service.label, e))
+            errordie("failed to get records for DSF service '{}': {}".format(
+                service.label, e))
 
         for record in records:
             service_dict['records'].append({ record.label: str(record) })
 
         services_dict.append({ 'trafficdirector': service_dict })
 
-    print(yaml.dump(services_dict))
+    print(yaml.safe_dump(services_dict))
 
 
 def list_zone(zone_name):
@@ -86,7 +87,7 @@ def list_redirect(zone_name):
                 "redirects": redirect_list,
                 },
             }]
-    print(yaml.dump(redirect_dict, default_flow_style=False))
+    print(yaml.safe_dump(redirect_dict, default_flow_style=False))
 
 def errordie(message):
     """
