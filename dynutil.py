@@ -39,7 +39,7 @@ def list_dsf():
                 service.label, e))
 
         for record in records:
-            service_dict['records'].append({ record.label: str(record) })
+            service_dict['records'].append({ "label": record.label, "record": str(record) })
 
         services_dict.append({ 'trafficdirector': service_dict })
 
