@@ -89,6 +89,34 @@ def list_redirect(zone_name):
             }]
     print(yaml.safe_dump(redirect_dict, default_flow_style=False))
 
+def list_record(zone_name, record_type):
+    """
+    Print information about records in a zone
+    """
+    try:
+        zone = Zone(zone_name)
+        records = zone.get_all_records()
+    except Exception as e:
+        errordie("failed to get records for zone '{}': {}".format(zone_name, e))
+
+    # build list of records
+    record_list = []
+    for record in records[record_type]:
+        record_list.append("{} {}".format(record.fqdn, record.address))
+
+    # bail out if there weren't any records
+    if len(record_list) == 0:
+        return
+
+    # build and output yaml document
+    record_dict = [{
+            "records": {
+                "zone": zone_name,
+                "records": record_list,
+                },
+            }]
+    print(yaml.safe_dump(record_dict, default_flow_style=False))
+
 def errordie(message):
     """
     Print error message then quit with exit code 1
@@ -108,8 +136,8 @@ def main():
     parser_required.add_argument('-c', '--creds-file',
             help="API credentials yaml file: contains {}, {} and {}".format( CUSTOMER_NAME,
                 USER_NAME, PASSWORD))
-    parser_required.add_argument('-l', '--list', choices=['zone', 'redirect', 'dsf'],
-            help="type of items to list: zones, redirects or DSF (Traffic Director) services")
+    parser_required.add_argument('-l', '--list', choices=['zone', 'arecord', 'redirect', 'dsf'],
+            help="type of items to list: zones, A records, redirects or DSF (Traffic Director) services")
 
     args = parser.parse_args()
 
@@ -118,8 +146,8 @@ def main():
         errordie("Please specify API credentials file")
     if getattr(args, 'list', None) == None:
         errordie("Please specify type of items to list")
-    # redirect and dsf queries need a zone to run against
-    if args.zone == None and (args.list == 'redirect'):
+    # record and redirect queries need a zone to run against
+    if args.zone == None and (args.list == 'redirect' or args.list == 'record'):
         errordie("Please specify zone to run query against")
 
     # validate creds yaml file
@@ -146,6 +174,8 @@ def main():
     # do query
     if args.list == 'zone':
         list_zone(args.zone)
+    if args.list == 'arecord':
+        list_record(args.zone, 'a_records')
     if args.list == 'redirect':
         list_redirect(args.zone)
     if args.list == 'dsf':
