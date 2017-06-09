@@ -12,6 +12,25 @@ CUSTOMER_NAME = "customer_name"
 USER_NAME = "user_name"
 PASSWORD = "password"
 
+def update_record(zone_name, record_name, value, record_type):
+    """
+    Update address of a record
+    """
+    try:
+        zone = Zone(zone_name)
+        node = zone.get_node(record_name)
+        records = node.get_all_records_by_type(record_type)
+    except Exception as e:
+        errordie("failed to get {} record '{}.{}': {}".format(record_type,
+            record_name, zone_name, e))
+
+    try:
+        records[0].address = value
+        zone.publish()
+    except Exception as e:
+        errordie("failed to update {} record '{}.{}': {}".format(record_type,
+            record_name, zone_name, e))
+
 
 def list_dsf():
     """
@@ -132,23 +151,39 @@ def main():
     # parse command line args
     parser = argparse.ArgumentParser()
     parser.add_argument('-z', '--zone', default=None, help="zone to run query against")
+    parser.add_argument('-r', '--record', default=None, help="record to operate on")
+    parser.add_argument('-v', '--value', default=None, help="value to assign")
     parser_required = parser.add_argument_group('required arguments')
+    parser_required.add_argument('-o', '--operation',
+            choices=['list', 'update', 'create', 'delete'],
+            help="operation to perform: list, update, create, delete")
     parser_required.add_argument('-c', '--creds-file',
             help="API credentials yaml file: contains {}, {} and {}".format( CUSTOMER_NAME,
                 USER_NAME, PASSWORD))
-    parser_required.add_argument('-l', '--list', choices=['zone', 'arecord', 'redirect', 'dsf'],
-            help="type of items to list: zones, A records, redirects or DSF (Traffic Director) services")
+    parser_required.add_argument('-t', '--type', choices=['zone', 'arecord', 'redirect', 'dsf'],
+            help="type of items to operate on: zones, A records, redirects, DSF (Traffic Director) services")
 
     args = parser.parse_args()
 
     # validate args
     if getattr(args, 'creds_file', None) == None:
         errordie("Please specify API credentials file")
-    if getattr(args, 'list', None) == None:
-        errordie("Please specify type of items to list")
-    # record and redirect queries need a zone to run against
-    if args.zone == None and (args.list == 'redirect' or args.list == 'record'):
-        errordie("Please specify zone to run query against")
+    if getattr(args, 'type', None) == None:
+        errordie("Please specify type of items to operate on")
+    if getattr(args, 'operation', None) == None:
+        errordie("Please specify operation to perform")
+    if args.operation == "list":
+        # record and redirect queries need a zone to run against
+        if args.zone == None and (args.type == 'redirect' or args.type == 'arecord'):
+            errordie("Please specify zone to run query against")
+    if args.operation == "update" or args.operation == "create" or args.operation == "delete":
+        if getattr(args, 'record', None) == None:
+            errordie("Please specify record to operate on")
+        if args.type != "arecord":
+            errordie("Update/delete/create is only supported for A records")
+        if ((args.operation == "update" or args.operation=="create") and
+            getattr(args, 'value', None) == None):
+            errordie("Please specify value to assign")
 
     # validate creds yaml file
     try:
@@ -172,14 +207,21 @@ def main():
         errordie("could not authenticate: {}".format(e))
 
     # do query
-    if args.list == 'zone':
-        list_zone(args.zone)
-    if args.list == 'arecord':
-        list_record(args.zone, 'a_records')
-    if args.list == 'redirect':
-        list_redirect(args.zone)
-    if args.list == 'dsf':
-        list_dsf()
+    if args.operation == 'list':
+        if args.type == 'zone':
+            list_zone(args.zone)
+        if args.type == 'arecord':
+            list_record(args.zone, 'a_records')
+        if args.type == 'redirect':
+            list_redirect(args.zone)
+        if args.type == 'dsf':
+            list_dsf()
+    elif args.operation == 'update':
+        update_record(args.zone, args.record, args.value, 'A')
+    elif args.operation == 'create':
+        errordie("Create not yet implemented")
+    elif args.operation == 'delete':
+        errordie("Delete not yet implemented")
 
 if __name__ == "__main__":
     main()
