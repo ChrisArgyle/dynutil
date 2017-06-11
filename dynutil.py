@@ -12,24 +12,51 @@ CUSTOMER_NAME = "customer_name"
 USER_NAME = "user_name"
 PASSWORD = "password"
 
-def update_record(zone_name, record_name, value, record_type):
+
+def operate_record(operation, zone_name, node_name, value, record_type_arg):
     """
     Update address of a record
     """
-    try:
-        zone = Zone(zone_name)
-        node = zone.get_node(record_name)
-        records = node.get_all_records_by_type(record_type)
-    except Exception as e:
-        errordie("failed to get {} record '{}.{}': {}".format(record_type,
-            record_name, zone_name, e))
+    record_type_map = {
+            "arecord": "A",
+            "cname": "CNAME",
+            }
+    record_type = record_type_map[record_type_arg]
 
-    try:
-        records[0].address = value
+    try: 
+        # get zone
+        zone = Zone(zone_name)
+
+        # update/delete
+        if operation == "update" or operation == "delete":
+            # if node_name is empty string then we're using the root node, use None
+            if node_name == '':
+                node = zone.get_node(None)
+            else:
+                node = zone.get_node(node_name)
+            records = node.get_all_records_by_type(record_type)
+
+            if not records:
+                raise Exception("did not find {} records under {}".format(record_type, node.fqdn))
+
+            if operation == "update":
+                records[0].address = value
+            elif operation == "delete":
+                records[0].delete()
+
+        #create
+        elif operation == "create":
+            if record_type == 'A':
+                kwargs = {'address': value}
+            elif record_type == 'CNAME':
+                kwargs = {'cname': value}
+            zone.add_record(node_name, record_type, **kwargs)
+
+        # publish changes to zone
         zone.publish()
+
     except Exception as e:
-        errordie("failed to update {} record '{}.{}': {}".format(record_type,
-            record_name, zone_name, e))
+        errordie("Failed to make record change: {}".format(e))
 
 
 def list_dsf():
@@ -108,10 +135,16 @@ def list_redirect(zone_name):
             }]
     print(yaml.safe_dump(redirect_dict, default_flow_style=False))
 
-def list_record(zone_name, record_type):
+def list_record(zone_name, record_type_arg):
     """
     Print information about records in a zone
     """
+    record_type_map = {
+            "arecord": "a_records",
+            "cname": "cname_records"
+            }
+    record_type = record_type_map[record_type_arg]
+
     try:
         zone = Zone(zone_name)
         records = zone.get_all_records()
@@ -121,7 +154,11 @@ def list_record(zone_name, record_type):
     # build list of records
     record_list = []
     for record in records[record_type]:
-        record_list.append("{} {}".format(record.fqdn, record.address))
+        if record_type_arg == "arecord":
+            value = record.address
+        elif record_type_arg == "cname":
+            value = record.cname
+        record_list.append("{} {}".format(record.fqdn, value))
 
     # bail out if there weren't any records
     if len(record_list) == 0:
@@ -150,8 +187,8 @@ def main():
     """
     # parse command line args
     parser = argparse.ArgumentParser()
-    parser.add_argument('-z', '--zone', default=None, help="zone to run query against")
-    parser.add_argument('-r', '--record', default=None, help="record to operate on")
+    parser.add_argument('-z', '--zone', help="zone to run query against")
+    parser.add_argument('-n', '--node', help="node to operate on (use empty string for root node)")
     parser.add_argument('-v', '--value', default=None, help="value to assign")
     parser_required = parser.add_argument_group('required arguments')
     parser_required.add_argument('-o', '--operation',
@@ -160,7 +197,8 @@ def main():
     parser_required.add_argument('-c', '--creds-file',
             help="API credentials yaml file: contains {}, {} and {}".format( CUSTOMER_NAME,
                 USER_NAME, PASSWORD))
-    parser_required.add_argument('-t', '--type', choices=['zone', 'arecord', 'redirect', 'dsf'],
+    parser_required.add_argument('-t', '--type',
+            choices=['zone', 'cname', 'arecord', 'redirect', 'dsf'],
             help="type of items to operate on: zones, A records, redirects, DSF (Traffic Director) services")
 
     args = parser.parse_args()
@@ -174,16 +212,15 @@ def main():
         errordie("Please specify operation to perform")
     if args.operation == "list":
         # record and redirect queries need a zone to run against
-        if args.zone == None and (args.type == 'redirect' or args.type == 'arecord'):
+        if (args.zone == None and
+                (args.type == 'redirect' or args.type == 'arecord' or args.type == 'cname')):
             errordie("Please specify zone to run query against")
     if args.operation == "update" or args.operation == "create" or args.operation == "delete":
-        if getattr(args, 'record', None) == None:
-            errordie("Please specify record to operate on")
-        if args.type != "arecord":
-            errordie("Update/delete/create is only supported for A records")
-        if ((args.operation == "update" or args.operation=="create") and
-            getattr(args, 'value', None) == None):
-            errordie("Please specify value to assign")
+        if getattr(args, 'node', None) == None:
+            errordie("Please specify node to operate on")
+        if args.operation == "update" or args.operation == "create":
+            if getattr(args, 'value', None) == None:
+                errordie("Please specify value to assign")
 
     # validate creds yaml file
     try:
@@ -210,18 +247,15 @@ def main():
     if args.operation == 'list':
         if args.type == 'zone':
             list_zone(args.zone)
-        if args.type == 'arecord':
-            list_record(args.zone, 'a_records')
+        if args.type == 'arecord' or args.type == 'cname':
+            list_record(args.zone, args.type)
         if args.type == 'redirect':
             list_redirect(args.zone)
         if args.type == 'dsf':
             list_dsf()
-    elif args.operation == 'update':
-        update_record(args.zone, args.record, args.value, 'A')
-    elif args.operation == 'create':
-        errordie("Create not yet implemented")
-    elif args.operation == 'delete':
-        errordie("Delete not yet implemented")
+    elif args.operation == 'update' or args.operation == 'create' or args.operation == 'delete':
+        operate_record(args.operation, args.zone, args.node, args.value, args.type)
+
 
 if __name__ == "__main__":
     main()
