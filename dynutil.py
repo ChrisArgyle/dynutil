@@ -18,7 +18,7 @@ def operate_record(operation, zone_name, node_name, value, record_type_arg):
     Update address of a record
     """
     record_type_map = {
-            "arecord": "A",
+            "a": "A",
             "cname": "CNAME",
             }
     record_type = record_type_map[record_type_arg]
@@ -140,8 +140,9 @@ def list_record(zone_name, record_type_arg):
     Print information about records in a zone
     """
     record_type_map = {
-            "arecord": "a_records",
-            "cname": "cname_records"
+            "a": "a_records",
+            "cname": "cname_records",
+            "mx": "mx_records",
             }
     record_type = record_type_map[record_type_arg]
 
@@ -154,10 +155,12 @@ def list_record(zone_name, record_type_arg):
     # build list of records
     record_list = []
     for record in records[record_type]:
-        if record_type_arg == "arecord":
+        if record_type_arg == "a":
             value = record.address
         elif record_type_arg == "cname":
             value = record.cname
+        elif record_type_arg == "mx":
+            value = record.exchange
         record_list.append("{} {}".format(record.fqdn, value))
 
     # bail out if there weren't any records
@@ -198,8 +201,8 @@ def main():
             help="API credentials yaml file: contains {}, {} and {}".format( CUSTOMER_NAME,
                 USER_NAME, PASSWORD))
     parser_required.add_argument('-t', '--type',
-            choices=['zone', 'cname', 'arecord', 'redirect', 'dsf'],
-            help="type of items to operate on: zones, A records, redirects, DSF (Traffic Director) services")
+            choices=['zone', 'mx', 'cname', 'a', 'redirect', 'dsf'],
+            help="type of items to operate on: zones, A/MX/CNAME records, redirects, DSF (Traffic Director) services")
 
     args = parser.parse_args()
 
@@ -213,7 +216,7 @@ def main():
     if args.operation == "list":
         # record and redirect queries need a zone to run against
         if (args.zone == None and
-                (args.type == 'redirect' or args.type == 'arecord' or args.type == 'cname')):
+                re.match(r'^(redirect|a|cname|mx)$', args.type)):
             errordie("Please specify zone to run query against")
     if args.operation == "update" or args.operation == "create" or args.operation == "delete":
         if getattr(args, 'node', None) == None:
@@ -247,7 +250,7 @@ def main():
     if args.operation == 'list':
         if args.type == 'zone':
             list_zone(args.zone)
-        if args.type == 'arecord' or args.type == 'cname':
+        if args.type == 'a' or args.type == 'cname' or args.type == 'mx':
             list_record(args.zone, args.type)
         if args.type == 'redirect':
             list_redirect(args.zone)
