@@ -3,6 +3,7 @@ import argparse
 import sys
 import os
 import yaml
+import re
 
 from dyn.tm.session import DynectSession
 from dyn.tm.zones import Zone, get_all_zones
@@ -18,8 +19,9 @@ def operate_record(operation, zone_name, node_name, value, record_type_arg):
     Update address of a record
     """
     record_type_map = {
-            "arecord": "A",
+            "a": "A",
             "cname": "CNAME",
+            "mx": "MX",
             }
     record_type = record_type_map[record_type_arg]
 
@@ -50,6 +52,8 @@ def operate_record(operation, zone_name, node_name, value, record_type_arg):
                 kwargs = {'address': value}
             elif record_type == 'CNAME':
                 kwargs = {'cname': value}
+            elif record_type == 'MX':
+                kwargs = {'exchange': value}
             zone.add_record(node_name, record_type, **kwargs)
 
         # publish changes to zone
@@ -140,8 +144,9 @@ def list_record(zone_name, record_type_arg):
     Print information about records in a zone
     """
     record_type_map = {
-            "arecord": "a_records",
-            "cname": "cname_records"
+            "a": "a_records",
+            "cname": "cname_records",
+            "mx": "mx_records",
             }
     record_type = record_type_map[record_type_arg]
 
@@ -151,18 +156,21 @@ def list_record(zone_name, record_type_arg):
     except Exception as e:
         errordie("failed to get records for zone '{}': {}".format(zone_name, e))
 
+    # bail out if there weren't any records of the requested type
+    if record_type not in records:
+        return
+
     # build list of records
     record_list = []
     for record in records[record_type]:
-        if record_type_arg == "arecord":
+        if record_type_arg == "a":
             value = record.address
         elif record_type_arg == "cname":
             value = record.cname
+        elif record_type_arg == "mx":
+            value = record.exchange
         record_list.append("{} {}".format(record.fqdn, value))
 
-    # bail out if there weren't any records
-    if len(record_list) == 0:
-        return
 
     # build and output yaml document
     record_dict = [{
@@ -198,8 +206,8 @@ def main():
             help="API credentials yaml file: contains {}, {} and {}".format( CUSTOMER_NAME,
                 USER_NAME, PASSWORD))
     parser_required.add_argument('-t', '--type',
-            choices=['zone', 'cname', 'arecord', 'redirect', 'dsf'],
-            help="type of items to operate on: zones, A records, redirects, DSF (Traffic Director) services")
+            choices=['zone', 'mx', 'cname', 'a', 'redirect', 'dsf'],
+            help="type of items to operate on: zones, A/MX/CNAME records, redirects, DSF (Traffic Director) services")
 
     args = parser.parse_args()
 
@@ -213,7 +221,7 @@ def main():
     if args.operation == "list":
         # record and redirect queries need a zone to run against
         if (args.zone == None and
-                (args.type == 'redirect' or args.type == 'arecord' or args.type == 'cname')):
+                re.match(r'^(redirect|a|cname|mx)$', args.type)):
             errordie("Please specify zone to run query against")
     if args.operation == "update" or args.operation == "create" or args.operation == "delete":
         if getattr(args, 'node', None) == None:
@@ -247,7 +255,7 @@ def main():
     if args.operation == 'list':
         if args.type == 'zone':
             list_zone(args.zone)
-        if args.type == 'arecord' or args.type == 'cname':
+        if args.type == 'a' or args.type == 'cname' or args.type == 'mx':
             list_record(args.zone, args.type)
         if args.type == 'redirect':
             list_redirect(args.zone)
