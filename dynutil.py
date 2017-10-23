@@ -169,17 +169,18 @@ def list_record(zone_name, record_type_arg):
             value = record.cname
         elif record_type_arg == "mx":
             value = record.exchange
-        record_list.append("{} {}".format(record.fqdn, value))
+        record_list.append({ record.fqdn: value })
 
 
     # build and output yaml document
-    record_dict = [{
-            "records": {
+    recordset_dict = [{
+            "recordset": {
+                "type": record_type_arg,
                 "zone": zone_name,
                 "records": record_list,
                 },
             }]
-    print(yaml.safe_dump(record_dict, default_flow_style=False))
+    print(yaml.safe_dump(recordset_dict, default_flow_style=False))
 
 def errordie(message):
     """
